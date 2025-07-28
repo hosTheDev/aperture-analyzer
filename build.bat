@@ -1,0 +1,1 @@
+clang++ main.cpp -o aperture.exe -I"NpCap/Include" -L"NpCap/Lib/x64" -lwpcap -lPacket

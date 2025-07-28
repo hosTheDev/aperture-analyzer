@@ -1,0 +1,8 @@
+# Ignore compiled executables
+*.exe
+
+# Ignore VS Code specific files
+.vscode/
+
+# Ignore third-party SDKs
+NpCap/
