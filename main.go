@@ -14,6 +14,12 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
+
+	"bufio"
+	"os"
+	"strconv"
+	"strings"
+	"unsafe"
 )
 
 // DeviceInfo is a Go struct that will hold the data for a single device.
@@ -58,6 +64,36 @@ func main() {
 			fmt.Printf("  %d: %s\n     %s\n", i+1, device.Name, device.Description)
 		}
 		fmt.Println("-------------------------------------------------")
+	}
+
+	var selectedDevice DeviceInfo
+	for {
+		fmt.Printf("\nEnter the number of the device to start analysis (1-%d): ", len(devices))
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		choice, err := strconv.Atoi(input)
+		if err == nil && choice >= 1 && choice <= len(devices) {
+			selectedIndex := choice - 1
+			selectedDevice = devices[selectedIndex]
+			break // Exit loop on valid selection
+		}
+		fmt.Printf("Invalid input. Please enter a number between 1 and %d.\n", len(devices))
+	}
+	
+	fmt.Printf("\n[Aperture] You selected: %s\n", selectedDevice.Name)
+	fmt.Println("[Aperture] Passing selection to C++ engine...")
+	
+	// Part 3: New - Bridge from Go to C++
+	cDeviceName := C.CString(selectedDevice.Name)
+	defer C.free(unsafe.Pointer(cDeviceName)) // Must free memory allocated by C.CString
+
+	result := C.start_capture_session(cDeviceName)
+	if result == 0 {
+		fmt.Println("[Aperture] C++ engine acknowledged the request successfully.")
+	} else {
+		fmt.Println("[Aperture] C++ engine reported an error.")
 	}
 
 	fmt.Println("\n[Aperture] Program finished.")

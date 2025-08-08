@@ -85,3 +85,16 @@ void free_json_string(char* json_string) {
     // allocated by strdup() in the function above.
     free(json_string);
 }
+
+int start_capture_session(const char* device_name) {
+    if (!device_name) {
+        return -1; // Return error if device_name is null
+    }
+
+    // This is our placeholder logic. It just prints the device name it received.
+    std::cout << "\n[C++ ENGINE] Instructed to start capture on device: " << device_name << std::endl;
+    
+    // In the future, this is where the pcap_open_live() logic will go.
+    
+    return 0; // Return 0 to indicate success
+}
