@@ -18,6 +18,10 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	// Import the gopacket library and its layers package
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 )
 
 // This Go struct now mirrors the C struct in capture.h
@@ -75,8 +79,11 @@ pollLoop:
 				goPacket := (*PacketData)(packet)
 				goBytes := C.GoBytes(unsafe.Pointer(goPacket.bytes), C.int(goPacket.caplen))
 
-				fmt.Printf("Go received packet! Timestamp: %d.%06d, Size: %d bytes\n",
-					goPacket.tv_sec, goPacket.tv_usec, len(goBytes))
+				// fmt.Printf("Go received packet! Timestamp: %d.%06d, Size: %d bytes\n",
+				// 	goPacket.tv_sec, goPacket.tv_usec, len(goBytes))
+
+				//Parse and print the packet summary
+				parseAndPrintPacket(goBytes)
 
 				// CRITICAL: Free the C memory for this packet.
 				C.free_packet(packet)
@@ -99,6 +106,40 @@ pollLoop:
 	time.Sleep(500 * time.Millisecond)
 
 	fmt.Println("\n[Aperture] Program finished.")
+}
+
+// This function uses gopacket to parse and print packet details.
+func parseAndPrintPacket(data []byte) {
+	// Decode a packet
+	packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
+
+	// Get the major protocol layers
+	ipLayer := packet.Layer(layers.LayerTypeIPv4)
+	tcpLayer := packet.Layer(layers.LayerTypeTCP)
+	udpLayer := packet.Layer(layers.LayerTypeUDP)
+	
+	timestamp := time.Now().Format("15:04:05.000000")
+	summary := fmt.Sprintf("%s |", timestamp)
+
+	if ipLayer != nil {
+		ip, _ := ipLayer.(*layers.IPv4)
+		summary += fmt.Sprintf(" %s -> %s |", ip.SrcIP, ip.DstIP)
+	} else {
+		summary += " Non-IP Packet |"
+	}
+
+	if tcpLayer != nil {
+		tcp, _ := tcpLayer.(*layers.TCP)
+		summary += fmt.Sprintf(" TCP | %s -> %s |", tcp.SrcPort, tcp.DstPort)
+	} else if udpLayer != nil {
+		udp, _ := udpLayer.(*layers.UDP)
+		summary += fmt.Sprintf(" UDP | %s -> %s |", udp.SrcPort, udp.DstPort)
+	} else {
+		summary += " Non-TCP/UDP |"
+	}
+
+	summary += fmt.Sprintf(" Len: %d", len(data))
+	fmt.Println(summary)
 }
 
 // getDevices handles the C++ call to retrieve the device list as JSON.
