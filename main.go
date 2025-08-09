@@ -16,9 +16,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"unsafe"
 	"time"
+	"unsafe"
 )
+
+// This Go struct now mirrors the C struct in capture.h
+type PacketData C.PacketData
 
 type DeviceInfo struct {
 	Name        string `json:"name"`
@@ -50,13 +53,47 @@ func main() {
 		return
 	}
 
-	time.Sleep(2 * time.Second)
+	// Goroutine to listen for the "stop" signal from the user
+	stopChan := make(chan struct{})
+	go func() {
+		bufio.NewReader(os.Stdin).ReadBytes('\n')
+		close(stopChan)
+	}()
 
-	fmt.Println("\n[Aperture] Capture in progress on background thread...")
-	fmt.Println("[Aperture] Press Enter to stop capture.")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	// Loop until the user signals to stop
+pollLoop:
+	for {
+		select {
+		case <-stopChan:
+			// User pressed Enter
+			break pollLoop
+		default:
+			// Non-blocking check for a new packet
+			packet := C.get_next_packet()
+			if packet != nil {
+				// We got a packet! Process it.
+				goPacket := (*PacketData)(packet)
+				goBytes := C.GoBytes(unsafe.Pointer(goPacket.bytes), C.int(goPacket.caplen))
 
-	fmt.Println("[Aperture] Stop signal received. Informing C++ engine...")
+				fmt.Printf("Go received packet! Timestamp: %d.%06d, Size: %d bytes\n",
+					goPacket.tv_sec, goPacket.tv_usec, len(goBytes))
+
+				// CRITICAL: Free the C memory for this packet.
+				C.free_packet(packet)
+			} else {
+				// No packet available, wait briefly to avoid busy-looping
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}
+
+	// time.Sleep(2 * time.Second)
+
+	// fmt.Println("\n[Aperture] Capture in progress on background thread...")
+	// fmt.Println("[Aperture] Press Enter to stop capture.")
+	// bufio.NewReader(os.Stdin).ReadBytes('\n')
+
+	// fmt.Println("[Aperture] Stop signal received. Informing C++ engine...")
 	C.stop_capture() // Tell the C++ thread to stop.
 
 	time.Sleep(500 * time.Millisecond)
@@ -119,7 +156,7 @@ func initiateCapture(device DeviceInfo) error {
 
 	result := C.start_capture_session(cDeviceName)
 	if result != 0 {
-		return errors.New("C++ engine reported an error on start")
+		return errors.New("c++ engine reported an error on start")
 	}
 
 	fmt.Println("[Aperture] C++ engine acknowledged the request successfully.")

@@ -9,11 +9,15 @@
 #include <string.h>   // For strdup()
 #include <thread>     // For std::thread
 #include <atomic>     // For std::atomic
+#include <mutex>      // For std::mutex
+#include <queue>      // For std::queue
 
 #pragma region VALUES
 static pcap_t* capture_handle = nullptr; // Placeholder for the capture handle
 static std::thread capture_thread; // Thread for capturing packets
 static std::atomic<bool> is_capturing(false); // Atomic flag to control capturing state
+static std::queue<PacketData*> packet_queue; // Queue to hold captured packets
+static std::mutex queue_mutex; // Mutex to protect access to the packet queue
 #pragma endregion
 
 // This is the actual implementation of the function declared in capture.h
@@ -96,8 +100,38 @@ void free_json_string(char* json_string) {
 
 // This is the callback function that pcap_loop will call for each packet.
 void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char* bytes) {
-    // For now, we just print a confirmation from the capture thread.
-    std::cout << "[C++ CAPTURE THREAD] Packet captured! Size: " << header->len << " bytes.\n";
+    if(!is_capturing) return; // If capturing is stopped, do nothing.
+    
+    PacketData *packet = new PacketData();
+    packet->len = header->len; // Captured length
+    packet->caplen = header->caplen; // Original length 
+    packet->tv_sec = header->ts.tv_sec; // Timestamp seconds
+    packet->tv_usec = header->ts.tv_usec; // Timestamp microseconds
+    packet->bytes = new unsigned char[packet->caplen]; // Allocate memory for the packet data
+    memcpy(packet->bytes, bytes, packet->caplen); // Copy the raw packet data
+
+    // Lock the queue mutex to safely add the packet to the queue
+    std::lock_guard<std::mutex> lock(queue_mutex);
+    packet_queue.push(packet); // Add the packet to the queue
+}
+
+// get_next_packet is called by Go to consume data from the queue.
+PacketData* get_next_packet() {
+    std::lock_guard<std::mutex> lock(queue_mutex);
+    if (packet_queue.empty()) {
+        return nullptr; // No packets available
+    }
+    PacketData* packet = packet_queue.front();
+    packet_queue.pop();
+    return packet;
+}
+
+// free_packet allows Go to free the memory we allocated in C++.
+void free_packet(PacketData* packet) {
+    if (packet) {
+        delete[] packet->bytes; // Free the byte array
+        delete packet;         // Free the struct itself
+    }
 }
 
 void capture_worker(std::string device_name){
