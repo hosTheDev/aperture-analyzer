@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"unsafe"
+	"time"
 )
 
 type DeviceInfo struct {
@@ -48,6 +49,17 @@ func main() {
 		fmt.Printf("[Aperture] Error: %v\n", err)
 		return
 	}
+
+	time.Sleep(2 * time.Second)
+
+	fmt.Println("\n[Aperture] Capture in progress on background thread...")
+	fmt.Println("[Aperture] Press Enter to stop capture.")
+	bufio.NewReader(os.Stdin).ReadBytes('\n')
+
+	fmt.Println("[Aperture] Stop signal received. Informing C++ engine...")
+	C.stop_capture() // Tell the C++ thread to stop.
+
+	time.Sleep(500 * time.Millisecond)
 
 	fmt.Println("\n[Aperture] Program finished.")
 }

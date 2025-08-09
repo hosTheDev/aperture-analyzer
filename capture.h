@@ -18,9 +18,11 @@ char* get_all_devices_as_json();
 // Frees the memory allocated by get_all_devices_as_json().
 void free_json_string(char* json_string);
 
-// New function to start a capture session.
-// Returns 0 on success, -1 on failure.
+// Starts the capture session on a background thread.
 int start_capture_session(const char* device_name);
+
+// Signals the background thread to stop capturing.
+void stop_capture();
 
 #ifdef __cplusplus
 }

@@ -7,6 +7,14 @@
 #include <sstream>    // For std::stringstream
 #include <stdlib.h>   // For free()
 #include <string.h>   // For strdup()
+#include <thread>     // For std::thread
+#include <atomic>     // For std::atomic
+
+#pragma region VALUES
+static pcap_t* capture_handle = nullptr; // Placeholder for the capture handle
+static std::thread capture_thread; // Thread for capturing packets
+static std::atomic<bool> is_capturing(false); // Atomic flag to control capturing state
+#pragma endregion
 
 // This is the actual implementation of the function declared in capture.h
 int get_device_count() {
@@ -86,15 +94,57 @@ void free_json_string(char* json_string) {
     free(json_string);
 }
 
+// This is the callback function that pcap_loop will call for each packet.
+void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char* bytes) {
+    // For now, we just print a confirmation from the capture thread.
+    std::cout << "[C++ CAPTURE THREAD] Packet captured! Size: " << header->len << " bytes.\n";
+}
+
+void capture_worker(std::string device_name){
+    char errbuf[PCAP_ERRBUF_SIZE];
+    capture_handle = pcap_open_live(device_name.c_str(), BUFSIZ, 1, 1000, errbuf);
+
+    if (capture_handle == nullptr) {
+        std::cerr << "[C++ ERROR] Could not open device " << device_name << ": " << errbuf << std::endl;
+        is_capturing = false;
+        return;
+    }
+
+    // Start the capture loop. This is a blocking call.
+    // It will only exit when pcap_breakloop() is called or an error occurs.
+    pcap_loop(capture_handle, -1, packet_handler, NULL);
+
+    // Cleanup after the loop is broken.
+    pcap_close(capture_handle);
+    capture_handle = nullptr;
+    std::cout << "[C++ THREAD] Capture loop finished.\n";
+}
+
 int start_capture_session(const char* device_name) {
-    if (!device_name) {
+    if (!device_name || is_capturing) {
         return -1; // Return error if device_name is null
     }
 
     // This is our placeholder logic. It just prints the device name it received.
     std::cout << "\n[C++ ENGINE] Instructed to start capture on device: " << device_name << std::endl;
     
-    // In the future, this is where the pcap_open_live() logic will go.
-    
+    is_capturing = true; // Set the capturing flag to true`
+
+    capture_thread = std::thread(capture_worker, std::string(device_name));
+    capture_thread.detach();
+
+    std::cout << "[C++ ENGINE] Capture thread launched for device: " << device_name << std::endl;
     return 0; // Return 0 to indicate success
+}
+
+void stop_capture() {
+    if (!is_capturing) {
+        return;
+    }
+    
+    is_capturing = false;
+    if (capture_handle != nullptr) {
+        // This tells pcap_loop to stop.
+        pcap_breakloop(capture_handle);
+    }
 }
