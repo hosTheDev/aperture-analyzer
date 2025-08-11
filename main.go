@@ -30,7 +30,7 @@ func main() {
 	}
 
 	// 4. Create a channel to pass packet data from the capture layer to the TUI.
-	packetChan := make(chan string)
+	packetChan := make(chan capture.PacketInfo)
 
 	// 5. Start polling for packets in a separate goroutine.
 	go capture.PollForPackets(packetChan)

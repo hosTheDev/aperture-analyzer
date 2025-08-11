@@ -23,6 +23,12 @@ import (
 // Types are now internal to this package but can be exposed if needed.
 type packetData C.PacketData
 
+type PacketInfo struct {
+	Summary  string
+	Length   int
+	Protocol string
+}
+
 type DeviceInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -62,26 +68,12 @@ func StopCapture() {
 	C.stop_capture()
 }
 
-// PollForPackets is a long-running function that retrieves packets and sends their summaries to a channel.
-func PollForPackets(packetChan chan<- string) {
-	for {
-		packet := C.get_next_packet()
-		if packet != nil {
-			goPacket := (*packetData)(packet)
-			goBytes := C.GoBytes(unsafe.Pointer(goPacket.bytes), C.int(goPacket.caplen))
-			summary := parsePacket(goBytes)
-			packetChan <- summary // Send the summary to the channel
-			C.free_packet(packet)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-// parsePacket is an internal helper that turns raw bytes into a summary string.
-func parsePacket(data []byte) string {
+func parsePacket(data []byte) PacketInfo {
 	packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
 	timestamp := time.Now().Format("15:04:05.000000")
-	summary := fmt.Sprintf("%s |", timestamp)
+	
+    summary := fmt.Sprintf("%s |", timestamp)
+    protocol := "Other" // Default protocol
 
 	ipLayer := packet.Layer(layers.LayerTypeIPv4)
 	tcpLayer := packet.Layer(layers.LayerTypeTCP)
@@ -93,15 +85,90 @@ func parsePacket(data []byte) string {
 	} else {
 		summary += " Non-IP Packet |"
 	}
+
 	if tcpLayer != nil {
 		tcp, _ := tcpLayer.(*layers.TCP)
 		summary += fmt.Sprintf(" TCP | %s -> %s |", tcp.SrcPort, tcp.DstPort)
+        protocol = "TCP"
 	} else if udpLayer != nil {
 		udp, _ := udpLayer.(*layers.UDP)
 		summary += fmt.Sprintf(" UDP | %s -> %s |", udp.SrcPort, udp.DstPort)
+        protocol = "UDP"
 	} else {
 		summary += " Non-TCP/UDP |"
 	}
+
 	summary += fmt.Sprintf(" Len: %d", len(data))
-	return summary
+
+    // Return the full struct
+	return PacketInfo{
+        Summary:  summary,
+        Length:   len(data),
+        Protocol: protocol,
+    }
 }
+
+
+// 3. MODIFY PollForPackets to use the new struct and channel type.
+func PollForPackets(packetChan chan<- PacketInfo) { // <-- Note the type change here
+	for {
+		packet := C.get_next_packet()
+		if packet != nil {
+			goPacket := (*packetData)(packet)
+			goBytes := C.GoBytes(unsafe.Pointer(goPacket.bytes), C.int(goPacket.caplen))
+			
+            // Parse the full packet info
+            packetInfo := parsePacket(goBytes)
+            
+            // Send the entire struct over the channel
+			packetChan <- packetInfo
+			C.free_packet(packet)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+
+// PollForPackets is a long-running function that retrieves packets and sends their summaries to a channel.
+// func PollForPackets(packetChan chan<- string) {
+// 	for {
+// 		packet := C.get_next_packet()
+// 		if packet != nil {
+// 			goPacket := (*packetData)(packet)
+// 			goBytes := C.GoBytes(unsafe.Pointer(goPacket.bytes), C.int(goPacket.caplen))
+// 			summary := parsePacket(goBytes)
+// 			packetChan <- summary // Send the summary to the channel
+// 			C.free_packet(packet)
+// 		}
+// 		time.Sleep(10 * time.Millisecond)
+// 	}
+// }
+
+// // parsePacket is an internal helper that turns raw bytes into a summary string.
+// func parsePacket(data []byte) string {
+// 	packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
+// 	timestamp := time.Now().Format("15:04:05.000000")
+// 	summary := fmt.Sprintf("%s |", timestamp)
+
+// 	ipLayer := packet.Layer(layers.LayerTypeIPv4)
+// 	tcpLayer := packet.Layer(layers.LayerTypeTCP)
+// 	udpLayer := packet.Layer(layers.LayerTypeUDP)
+
+// 	if ipLayer != nil {
+// 		ip, _ := ipLayer.(*layers.IPv4)
+// 		summary += fmt.Sprintf(" %s -> %s |", ip.SrcIP, ip.DstIP)
+// 	} else {
+// 		summary += " Non-IP Packet |"
+// 	}
+// 	if tcpLayer != nil {
+// 		tcp, _ := tcpLayer.(*layers.TCP)
+// 		summary += fmt.Sprintf(" TCP | %s -> %s |", tcp.SrcPort, tcp.DstPort)
+// 	} else if udpLayer != nil {
+// 		udp, _ := udpLayer.(*layers.UDP)
+// 		summary += fmt.Sprintf(" UDP | %s -> %s |", udp.SrcPort, udp.DstPort)
+// 	} else {
+// 		summary += " Non-TCP/UDP |"
+// 	}
+// 	summary += fmt.Sprintf(" Len: %d", len(data))
+// 	return summary
+// }
