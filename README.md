@@ -25,6 +25,7 @@ It leverages the raw capture speed of C++ and the Npcap library, combined with t
 -   Displays a real-time, formatted summary of captured packets (Timestamp, IP addresses, Ports, Protocol, and Length).
 -   Cleanly separates high-performance capture logic (C++) from application control and parsing (Go).
 
+
 ## Architecture
 
 Aperture uses a hybrid model to get the best of both worlds:
@@ -41,6 +42,7 @@ Aperture uses a hybrid model to get the best of both worlds:
 -   **Npcap**: The underlying packet capture driver and library for Windows.
 -   **MinGW-w64**: The compiler toolchain used for building the C++ code and linking with Go on Windows.
 -   **gopacket**: The primary Go library for packet decoding and analysis.
+-   **Bubble Tea & Lipgloss**: Go libraries for building sophisticated Text-based User Interfaces.
 
 ## Prerequisites & Setup
 
@@ -77,12 +79,17 @@ The project needs the Npcap headers and libraries to compile the C++ engine.
     <project-root>/
     ├── NpCap/
     │   ├── Include/
-    │   ├── Lib/
-    │   └── ... (other SDK files)
+    │   └── Lib/
+    ├── internal/
+    │   ├── capture/
+    │   │   ├── capture.cpp
+    │   │   ├── capture.h
+    │   │   └── capture.go
+    │   └── tui/
+    │       └── tui.go
+    ├── go.mod
     ├── main.go
-    ├── capture.cpp
-    ├── capture.h
-    └── ...
+    └── build.bat
     ```
     > **Note:** The `NpCap/` directory is listed in `.gitignore` and should not be committed to version control.
 
@@ -107,7 +114,7 @@ After a successful build, you can run the application directly from your termina
 1.  The program will start and display a list of available network devices.
 2.  Enter the number corresponding to the device you wish to analyze.
 3.  The capture session will begin, and you will see a real-time summary of packets.
-4.  To stop the capture, simply **press Enter**. The program will then shut down gracefully.
+4.  To stop the capture, simply **press q**. The program will then shut down gracefully.
 
 ---
 This project is licensed under the MIT License. See the LICENSE file for details.
